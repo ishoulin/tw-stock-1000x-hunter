@@ -14,13 +14,14 @@ def fetch_and_filter_1000x_candidates():
     try:
         stock_info = fm.taiwan_stock_info()
         
-        # 徹底純化股票清單：
-        # 1. 必須是 4 位純數字代碼 (排除權證 6 位數、興櫃與特種商品)
-        # 2. 排除金融、營造、觀光產業
+        # 1. 純 4 位數代碼
+        # 2. 僅限上市 (twse) 與 上櫃 (tpex)，排除興櫃與其他衍生商品
+        # 3. 排除金融、營造、觀光
         valid_stocks = stock_info[
             (stock_info['stock_id'].str.isdigit()) & 
             (stock_info['stock_id'].str.len() == 4) &
-            (~stock_info['industry_category'].isin(['金融保險', '建材營造', '觀光餐旅', '金融業']))
+            (stock_info['type'].isin(['twse', 'tpex'])) &
+            (~stock_info['industry_category'].isin(['金融保險', '建材營造', '觀光餐旅',
         ].copy()
         
     except Exception as e:
@@ -33,7 +34,7 @@ def fetch_and_filter_1000x_candidates():
 
     stock_list = valid_stocks['stock_id'].tolist()
     total_count = len(stock_list)
-    print(f"🔍 已完成無效標的過濾，正式開始掃描全台股 {total_count} 檔普通股...")
+    print(f"🔍 已精準過濾非上市櫃標的，正式開始掃描台股 {total_count} 檔普通股...")
 
     for idx, stock_id in enumerate(stock_list, 1):
         try:
@@ -42,16 +43,22 @@ def fetch_and_filter_1000x_candidates():
             if financial_data is None or financial_data.empty:
                 continue
 
+            # 抓取 EPS (支援 EPS / EPS(元) 等相容名稱)
+            eps_df = financial_data[financial_data['type'].str.contains('EPS', case=False, na=False)]
+            latest_4q_eps = eps_df.tail(4)
+            if len(latest_4q_eps) < 4:
+                continue
+            eps_4q = latest_4q_eps['value'].sum()
             latest_4q = financial_data[financial_data['type'] == 'EPS'].tail(4)
             if len(latest_4q) < 4:
                 continue
-
             eps_4q = latest_4q['value'].sum()
 
             # 抓取最近一季的毛利率、營益率與資本額
             gross_df = financial_data[financial_data['type'] == 'GrossProfitMargin']
             gross_margin = gross_df.tail(1)['value'].values[0] if not gross_df.empty else 0
 
+            # 抓取營益率 (OperatingIncomeMargin / OperatingMargin)
             oper_df = financial_data[financial_data['type'] == 'OperatingIncomeMargin']
             operating_margin = oper_df.tail(1)['value'].values[0] if not oper_df.empty else 0
 
@@ -61,10 +68,12 @@ def fetch_and_filter_1000x_candidates():
             # 2. 月營收 YoY
             revenue_data = fm.taiwan_stock_month_revenue(stock_id=stock_id, start_date=start_date)
             if revenue_data is None or revenue_data.empty:
-                rev_yoy_3m_avg = 0
+                rev_yoy_3m_avg = 0.0
             else:
-                rev_yoy_3m_avg = revenue_data.tail(3)['revenue_year_growth_ratio'].mean()
-
+                # 相容欄位名稱處理
+                yoy_col = 'revenue_year_growth_ratio' if 'revenue_year_growth_ratio' in revenue_data.columns else 'year_growth_ratio'
+                rev_yoy_3m_avg = revenue_data.tail(3)[yoy_col].mean() if yoy_col in revenue_data.columns else 0.0
+            
             # 3. 千張大戶持股比
             holder_data = fm.taiwan_stock_holding_shares_per(
                 stock_id=stock_id, 
