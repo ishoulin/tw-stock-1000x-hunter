@@ -26,7 +26,8 @@ def fetch_and_filter_1000x_candidates():
                 '金融保險', 
                 '建材營造', 
                 '觀光餐旅'
-            ])).copy()
+            ]))
+        ].copy()
         
     except Exception as e:
         print(f"⚠️ 讀取股票基本資料失敗: {e}")
