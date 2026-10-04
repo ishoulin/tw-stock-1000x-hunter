@@ -191,6 +191,14 @@ def send_email_notification(df):
     <body style="font-family: Arial, sans-serif; color: #333; line-height: 1.6;">
         <h2 style="color: #d9534f; border-bottom: 2px solid #d9534f; padding-bottom: 8px;">🔥【千金預備軍分級監控報告】🔥</h2>
         <p>機器人已完成全台股財報與籌碼掃描，本次共掃描出 <b>{total_found}</b> 檔符合 4 項（含）以上條件之標的：</p>
+
+        <p><b>📋 當前『千金 6 大 DNA』篩選門檻如下：</b><br>
+        1. 資本額小於 30 億（中小型股）<br>
+        2. 近 4 季 EPS ≥ 20 元（一年賺 2 個股本）<br>
+        3. 毛利率 ≥ 45%（極高獲利護城河）<br>
+        4. 營益率 ≥ 20%（本業獲利極強）<br>
+        5. 營收 YoY ≥ 20%（近 3 個月營收爆發）<br>
+        6. 千張大戶持股 ≥ 60%（籌碼高度集中）</p>
         
         <h3 style="color: #d9534f;">🌟 第一梯隊：完全符合 6 大 DNA（頂級預備軍）</h3>
         {generate_table_html(df_6, "#f8d7da")}
