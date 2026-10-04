@@ -4,11 +4,11 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import pandas as pd
 import datetime
-from FinMind.Data import Load
+from FinMind.Data import DataLoader
 
 def fetch_and_filter_1000x_candidates():
     print("🚀 開始執行台股『千金預備軍』6 大 DNA 自動篩選機制...")
-    fm = Load()
+    fm = DataLoader()
     
     # --------------------------------------------------------------------------
     # 【千金預備軍 6 大硬核篩選標準】
