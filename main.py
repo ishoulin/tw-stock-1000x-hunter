@@ -1,9 +1,10 @@
 import os
+import time
 import smtplib
+import datetime
+import pandas as pd
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-import pandas as pd
-import datetime
 from FinMind.data import DataLoader
 
 def fetch_and_filter_1000x_candidates():
@@ -12,53 +13,71 @@ def fetch_and_filter_1000x_candidates():
 
     try:
         stock_info = fm.taiwan_stock_info()
+        
+        # 徹底純化股票清單：
+        # 1. 必須是 4 位純數字代碼 (排除權證 6 位數、興櫃與特種商品)
+        # 2. 排除金融、營造、觀光產業
         valid_stocks = stock_info[
-            (~stock_info['stock_id'].str.startswith('00')) & 
-            (~stock_info['industry_category'].isin(['金融保險', '建材營造', '觀光餐旅']))
-        ]
+            (stock_info['stock_id'].str.isdigit()) & 
+            (stock_info['stock_id'].str.len() == 4) &
+            (~stock_info['industry_category'].isin(['金融保險', '建材營造', '觀光餐旅', '金融業']))
+        ].copy()
+        
     except Exception as e:
-        print(f"⚠️ 讀取股票基本資料失敗，使用預設測試清單: {e}")
-        valid_stocks = pd.DataFrame({'stock_id': ['3661', '5274', '2059', '6669']})
+        print(f"⚠️ 讀取股票基本資料失敗: {e}")
+        return pd.DataFrame()
 
     candidates = []
     today = datetime.date.today()
     start_date = (today - datetime.timedelta(days=365)).strftime("%Y-%m-%d")
 
-    print(f"🔍 開始掃描 {len(valid_stocks)} 檔個股...")
+    stock_list = valid_stocks['stock_id'].tolist()
+    total_count = len(stock_list)
+    print(f"🔍 已完成無效標的過濾，正式開始掃描全台股 {total_count} 檔普通股...")
 
-    # 1. 徹底過濾掉權證 (6位數代碼) 與 上市櫃 ETF/存託憑證，只留 4 位數一般個股
-    valid_stocks = valid_stocks[valid_stocks['stock_id'].str.len() == 4]
-
-    # 2. 進行全台股完整掃描 (移除 [:30] 限制)
-    for stock_id in valid_stocks['stock_id'].tolist():
-            
+    for idx, stock_id in enumerate(stock_list, 1):
         try:
             # 1. 財報數據 (EPS、毛利率、營益率、資本額)
             financial_data = fm.taiwan_stock_financial_statement(stock_id=stock_id, start_date=start_date)
-            if financial_data.empty:
+            if financial_data is None or financial_data.empty:
                 continue
 
-            latest_4q = financial_data.tail(4)
+            latest_4q = financial_data[financial_data['type'] == 'EPS'].tail(4)
             if len(latest_4q) < 4:
                 continue
 
-            eps_4q = latest_4q[latest_4q['type'] == 'EPS']['value'].sum()
-            latest_q = financial_data.tail(1)
-            gross_margin = latest_q[latest_q['type'] == 'GrossProfitMargin']['value'].values[0] if 'GrossProfitMargin' in latest_q['type'].values else 0
-            operating_margin = latest_q[latest_q['type'] == 'OperatingIncomeMargin']['value'].values[0] if 'OperatingIncomeMargin' in latest_q['type'].values else 0
-            capital_billion = latest_q[latest_q['type'] == 'Capital']['value'].values[0] / 100000000 if 'Capital' in latest_q['type'].values else 100
+            eps_4q = latest_4q['value'].sum()
+
+            # 抓取最近一季的毛利率、營益率與資本額
+            gross_df = financial_data[financial_data['type'] == 'GrossProfitMargin']
+            gross_margin = gross_df.tail(1)['value'].values[0] if not gross_df.empty else 0
+
+            oper_df = financial_data[financial_data['type'] == 'OperatingIncomeMargin']
+            operating_margin = oper_df.tail(1)['value'].values[0] if not oper_df.empty else 0
+
+            cap_df = financial_data[financial_data['type'] == 'Capital']
+            capital_billion = cap_df.tail(1)['value'].values[0] / 100000000 if not cap_df.empty else 100
 
             # 2. 月營收 YoY
             revenue_data = fm.taiwan_stock_month_revenue(stock_id=stock_id, start_date=start_date)
-            rev_yoy_3m_avg = revenue_data.tail(3)['revenue_year_growth_ratio'].mean() if not revenue_data.empty else 0
+            if revenue_data is None or revenue_data.empty:
+                rev_yoy_3m_avg = 0
+            else:
+                rev_yoy_3m_avg = revenue_data.tail(3)['revenue_year_growth_ratio'].mean()
 
             # 3. 千張大戶持股比
-            holder_data = fm.taiwan_stock_holding_shares_per(stock_id=stock_id, start_date=(today - datetime.timedelta(days=30)).strftime("%Y-%m-%d"))
-            thousand_share_holders = holder_data[holder_data['HoldingSharesLevel'] == '15']
-            major_holder_ratio = thousand_share_holders.tail(1)['percent'].values[0] if not thousand_share_holders.empty else 0
+            holder_data = fm.taiwan_stock_holding_shares_per(
+                stock_id=stock_id, 
+                start_date=(today - datetime.timedelta(days=30)).strftime("%Y-%m-%d")
+            )
+            if holder_data is None or holder_data.empty:
+                major_holder_ratio = 0
+            else:
+                thousand_share_holders = holder_data[holder_data['HoldingSharesLevel'] == '15']
+                major_holder_ratio = thousand_share_holders.tail(1)['percent'].values[0] if not thousand_share_holders.empty else 0
 
             # ------------------------------------------------------------------
-            # 【計算 6 大條件符合數】
+            # 【判斷 6 大條件符合數】
             # ------------------------------------------------------------------
             c1 = capital_billion < 30.0         # 資本額 < 30億
             c2 = gross_margin >= 45.0           # 毛利率 > 45%
@@ -69,11 +88,12 @@ def fetch_and_filter_1000x_candidates():
 
             match_count = sum([c1, c2, c3, c4, c5, c6])
 
-            # 只要符合 4 個條件以上就納入分級清單
+            # 符合 4 個或以上就放入結果
             if match_count >= 4:
-                stock_name = valid_stocks[valid_stocks['stock_id'] == stock_id]['stock_name'].values[0] if 'stock_name' in valid_stocks.columns else stock_id
+                stock_name_series = valid_stocks[valid_stocks['stock_id'] == stock_id]['stock_name']
+                stock_name = stock_name_series.values[0] if not stock_name_series.empty else stock_id
                 
-                candidates.append({
+                item = {
                     "stock_id": stock_id,
                     "name": stock_name,
                     "match_count": match_count,
@@ -83,8 +103,13 @@ def fetch_and_filter_1000x_candidates():
                     "rev_yoy": round(rev_yoy_3m_avg, 2),
                     "capital": round(capital_billion, 2),
                     "major_holders": round(major_holder_ratio, 2)
-                })
-                print(f"🎯 [{match_count}/6 項符合] {stock_id} {stock_name}")
+                }
+                candidates.append(item)
+                print(f"🎯 [{idx}/{total_count}] 找到潛力股！[{match_count}/6 項符合] {stock_id} {stock_name} (EPS: {round(eps_4q,1)}, 大戶: {round(major_holder_ratio,1)}%)")
+
+            # 每處理 100 檔輸出一次進度
+            if idx % 100 == 0:
+                print(f"⏳ 已完成 {idx}/{total_count} 檔掃描...")
 
         except Exception as e:
             continue
@@ -96,7 +121,7 @@ def fetch_and_filter_1000x_candidates():
     return df_result
 
 def generate_table_html(df_group, bg_color):
-    """輔助函式：產生表格 HTML"""
+    """產生分級 HTML 表格"""
     if df_group.empty:
         return "<p style='color: #888;'>此區間暫無符合標的。</p>"
     
@@ -135,22 +160,23 @@ def send_email_notification(df):
     receiver_email = os.environ.get("RECEIVER_EMAIL")
 
     if not sender_email or not sender_password or not receiver_email:
-        print("⚠️ 未偵測到完整 Email 環境變數，跳過寄信步驟。")
+        print("⚠️ 未設定 Email 環境變數，跳過寄信步驟。")
         return
 
     today_str = datetime.date.today().strftime("%Y-%m-%d")
     subject = f"🎯【千金預備軍分級巡檢】{today_str} 自動化月報"
 
-    # 拆分三大梯隊
     df_6 = df[df['match_count'] == 6] if not df.empty else pd.DataFrame()
     df_5 = df[df['match_count'] == 5] if not df.empty else pd.DataFrame()
     df_4 = df[df['match_count'] == 4] if not df.empty else pd.DataFrame()
+
+    total_found = len(df) if not df.empty else 0
 
     html_content = f"""
     <html>
     <body style="font-family: Arial, sans-serif; color: #333; line-height: 1.6;">
         <h2 style="color: #d9534f; border-bottom: 2px solid #d9534f; padding-bottom: 8px;">🔥【千金預備軍分級監控報告】🔥</h2>
-        <p>機器人已完成全台股財報與籌碼掃描，結果分為 6 項全滿、5 項與 4 項符合梯隊：</p>
+        <p>機器人已完成全台股財報與籌碼掃描，本次共掃描出 <b>{total_found}</b> 檔符合 4 項（含）以上條件之標的：</p>
         
         <h3 style="color: #d9534f;">🌟 第一梯隊：完全符合 6 大 DNA（頂級預備軍）</h3>
         {generate_table_html(df_6, "#f8d7da")}
