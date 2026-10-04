@@ -26,7 +26,12 @@ def fetch_and_filter_1000x_candidates():
 
     print(f"🔍 開始掃描 {len(valid_stocks)} 檔個股...")
 
-    for stock_id in valid_stocks['stock_id'].tolist()[:30]:  # 可依需求調整掃描數量
+    # 1. 徹底過濾掉權證 (6位數代碼) 與 上市櫃 ETF/存託憑證，只留 4 位數一般個股
+    valid_stocks = valid_stocks[valid_stocks['stock_id'].str.len() == 4]
+
+    # 2. 進行全台股完整掃描 (移除 [:30] 限制)
+    for stock_id in valid_stocks['stock_id'].tolist():
+            
         try:
             # 1. 財報數據 (EPS、毛利率、營益率、資本額)
             financial_data = fm.taiwan_stock_financial_statement(stock_id=stock_id, start_date=start_date)
