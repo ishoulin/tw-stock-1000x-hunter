@@ -21,8 +21,12 @@ def fetch_and_filter_1000x_candidates():
             (stock_info['stock_id'].str.isdigit()) & 
             (stock_info['stock_id'].str.len() == 4) &
             (stock_info['type'].isin(['twse', 'tpex'])) &
-            (~stock_info['industry_category'].isin(['金融保險', '建材營造', '觀光餐旅',
-        ].copy()
+            # 1. 最外層用括號包起來（方便換行），且 .isin([ ... ]) 的括號要正確閉合
+            (~stock_info['industry_category'].isin([
+                '金融保險', 
+                '建材營造', 
+                '觀光餐旅'
+            ])).copy()
         
     except Exception as e:
         print(f"⚠️ 讀取股票基本資料失敗: {e}")
