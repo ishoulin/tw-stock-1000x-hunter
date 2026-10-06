@@ -41,7 +41,13 @@ def fetch_and_filter_1000x_candidates():
     total_count = len(stock_list)
     print(f"🔍 已精準過濾非上市櫃標的，正式開始掃描台股 {total_count} 檔普通股...")
 
+        
     for idx, stock_id in enumerate(stock_list, 1):
+        # 判斷當前這檔是否為診斷股票
+        is_debug = stock_id in debug_stocks
+    
+        if is_debug:
+            print(f"\n⚡ [DEBUG] 開始處理指標股: {stock_id}")
         try:
             # 1. 財報數據 (EPS、毛利率、營益率、資本額)
             financial_data = fm.taiwan_stock_financial_statement(stock_id=stock_id, start_date=start_date)
@@ -101,14 +107,12 @@ def fetch_and_filter_1000x_candidates():
             c6 = operating_margin >= 15.0       # 營益率 > 15%
 
             match_count = sum([c1, c2, c3, c4, c5, c6])
-
-            # ==================================================================
-            # 🔍 【DEBUG 診斷區塊 - 放在這裡！】
-            # 特別鎖定指標股，只要遇到這幾檔就強制印出中間過程數據
-            # ==================================================================
-            debug_stocks = ['2330', '3008', '5274', '6669']
-            if stock_id in debug_stocks:
-                print(f"\n================ [DEBUG 診斷: {stock_id}] ================")
+ 
+            # ------------------------------------------------------------------
+            # 3. 計算完畢後，如果是指標股就強制印出數值
+            # ------------------------------------------------------------------
+            if is_debug:
+                print(f"================ [DEBUG 診斷: {stock_id}] ================")
                 print(f"1. 資本額 (億): {capital_billion:.2f} (c1 < 60: {c1})")
                 print(f"2. 毛利率 (%): {gross_margin:.2f}% (c2 >= 30%: {c2})")
                 print(f"3. 近 4 季 EPS: {eps_4q:.2f} (c3 >= 12: {c3})")
@@ -117,7 +121,7 @@ def fetch_and_filter_1000x_candidates():
                 print(f"6. 營益率 (%): {operating_margin:.2f}% (c6 >= 15%: {c6})")
                 print(f"👉 符合項目數: {match_count} / 6")
                 print(f"========================================================\n")
-            
+   
             # 符合 4 個或以上就放入結果
             if match_count >= 4:
                 stock_name_series = valid_stocks[valid_stocks['stock_id'] == stock_id]['stock_name']
@@ -139,9 +143,13 @@ def fetch_and_filter_1000x_candidates():
 
             # 每處理 100 檔輸出一次進度
             if idx % 100 == 0:
+                total_count_str = len(stock_list) if 'total_count' not in locals() else total_count
                 print(f"⏳ 已完成 {idx}/{total_count} 檔掃描...")
 
         except Exception as e:
+            # 4. [例外處理] 只有發生錯誤才會進到這裡
+            if is_debug:
+                print(f"❌ [DEBUG 報錯] {stock_id} 運算時發生例外錯誤: {e}")
             continue
 
     df_result = pd.DataFrame(candidates)
