@@ -38,7 +38,7 @@ def fetch_and_filter_1000x_candidates():
 
         # 2. ⚡ 關鍵關鍵！加入「股價/成交量」速篩（1次 API 搞定全市場，省下 80% 無用請求）
         recent_date = (datetime.date.today() - datetime.timedelta(days=7)).strftime("%Y-%m-%d")
-        price_data = fm.taiwan_stock_daily_price(start_date=recent_date)
+        price_data = fm.taiwan_stock_daily(start_date=recent_date)
 
         if price_data is not None and not price_data.empty:
             latest_prices = price_data.groupby('stock_id').last()
