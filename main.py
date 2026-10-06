@@ -36,28 +36,34 @@ def fetch_and_filter_1000x_candidates():
         raw_list = valid_stocks['stock_id'].tolist()
         print(f"🧹 基本產業過濾完成，剩餘普通股: {len(raw_list)} 檔")
 
-        # 2. ⚡ 關鍵關鍵！加入「股價/成交量」速篩（1次 API 搞定全市場，省下 80% 無用請求）
-        recent_date = (datetime.date.today() - datetime.timedelta(days=7)).strftime("%Y-%m-%d")
-        price_data = fm.taiwan_stock_daily(start_date=recent_date)
+        # ------------------------------------------------------------------
+        # 2. 免費版相容快篩 (加上獨立 try，避免免費版權限限制中斷流程)
+        # ------------------------------------------------------------------
+        stock_list = raw_list
+        try:
+            # 使用免費版允許的全市場單日個股 API
+            recent_date = (today - datetime.timedelta(days=5)).strftime("%Y-%m-%d")
+            price_data = fm.taiwan_stock_price_all(date=recent_date)
 
-        if price_data is not None and not price_data.empty:
-            latest_prices = price_data.groupby('stock_id').last()
-            
-            # 濾網：收盤價 >= 25 元 且 成交量 >= 50,000 股 (50張)
-            qualified = latest_prices[
-                (latest_prices['close'] >= 25) & 
-                (latest_prices['Trading_Volume'] >= 50000)
-            ]
-            valid_set = set(qualified.index)
-            valid_set.update(debug_stocks)  # 強制保留 Debug 測試股
-            
-            stock_list = [s for s in raw_list if s in valid_set]
-            print(f"🎯 股價流動性快篩完成！目標精簡為 {len(stock_list)} 檔（完美避開 API 牆）\n")
-        else:
-            stock_list = raw_list
+            if price_data is not None and not price_data.empty:
+                # 濾網：收盤價 >= 25 元 且 成交量 >= 50,000 股 (50張)
+                qualified = price_data[
+                    (price_data['close'] >= 25) & 
+                    (price_data['Trading_Volume'] >= 50000)
+                ]
+                valid_set = set(qualified['stock_id'].unique())
+                valid_set.update(debug_stocks)  # 強制保留 Debug 測試股
+
+                stock_list = [s for s in raw_list if s in valid_set]
+                valid_stocks = valid_stocks[valid_stocks['stock_id'].isin(stock_list)]
+                print(f"🎯 股價流動性快篩完成！目標成功精簡為 {len(stock_list)} 檔！\n")
+            else:
+                print("ℹ️ 未取得單日股價快篩資料，自動降級為全量普通股掃描...")
+        except Exception as filter_err:
+            print(f"ℹ️ 快篩遇到 API 限制或假日無資料 ({filter_err})，自動降級為全量普通股掃描...")
 
         total_count = len(stock_list)
-              
+                              
     except Exception as e:
         print(f"⚠️ 讀取股票基本資料失敗: {e}")
         return pd.DataFrame()
