@@ -26,7 +26,7 @@ def fetch_and_filter_1000x_candidates():
         valid_stocks = stock_info[
             (stock_info['stock_id'].str.isdigit()) & 
             (stock_info['stock_id'].str.len() == 4) &
-            (stock_info['market'].isin(['Taiwan Stock Market', 'TWO'])) &  # 👈 修正為 FinMind 的真實 Market 名稱
+            (stock_info['type'].isin(['twse', 'tpex'])) &  # 👈 修正為 FinMind 的真實 Market 名稱
             (~stock_info['industry_category'].isin([
                 '金融保險', '建材營造', '觀光餐旅', '金融保險業', '建材營造業', '觀光事業'
             ])) &
