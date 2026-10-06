@@ -101,6 +101,7 @@ def fetch_and_filter_1000x_candidates():
                 thousand_share_holders = holder_data[holder_data['HoldingSharesLevel'] == '15']
                 major_holder_ratio = thousand_share_holders.tail(1)['percent'].values[0] if not thousand_share_holders.empty else 0
 
+            
             # ------------------------------------------------------------------
             # 【判斷 6 大條件符合數 - 2026 10月版】
             # ------------------------------------------------------------------
@@ -152,10 +153,15 @@ def fetch_and_filter_1000x_candidates():
                 print(f"⏳ 已完成 {idx}/{total_count} 檔掃描...")
 
         except Exception as e:
-            # 4. [例外處理] 只有發生錯誤才會進到這裡
-            if is_debug:
-                print(f"❌ [DEBUG 報錯] {stock_id} 運算時發生例外錯誤: {e}")
-            continue
+            err_msg = str(e).lower()
+            if "ip banned" in err_msg or "429" in err_msg:
+                print(f"⚠️ 觸發 FinMind IP 頻率限制，觸發檔位 {stock_id}，自動冷卻 30 秒後繼續...")
+                time.sleep(30)  # 👈 如果不幸已經被擋，自動冷卻 30 秒救回
+            else:
+                if is_debug:
+                    print(f"❌ [DEBUG 報錯] {stock_id} 運算時發生例外錯誤: {e}")
+            time.sleep(0.3)
+        continue
 
     df_result = pd.DataFrame(candidates)
     if not df_result.empty:
