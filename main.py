@@ -8,6 +8,11 @@ from email.mime.multipart import MIMEMultipart
 from FinMind.data import DataLoader
 
 def fetch_and_filter_1000x_candidates():
+    # ... 前面抓取股票清單等邏輯 ...
+
+    # 針對特定指標股開啟 DEBUG 診斷印出
+    debug_stocks = ['2330', '2454', '3661']  # 👈 在迴圈外補上這行
+    
     print("🚀 開始執行台股『千金預備軍』分級篩選機制 (4/5/6 項條件判斷)...")
     fm = DataLoader()
 
