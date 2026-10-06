@@ -91,14 +91,14 @@ def fetch_and_filter_1000x_candidates():
                 major_holder_ratio = thousand_share_holders.tail(1)['percent'].values[0] if not thousand_share_holders.empty else 0
 
             # ------------------------------------------------------------------
-            # 【判斷 6 大條件符合數】
+            # 【判斷 6 大條件符合數 - 2026 10月版】
             # ------------------------------------------------------------------
-            c1 = capital_billion < 30.0         # 資本額 < 30億
-            c2 = gross_margin >= 45.0           # 毛利率 > 45%
-            c3 = eps_4q >= 20.0                 # 近4季 EPS > 20元
-            c4 = rev_yoy_3m_avg >= 20.0         # 營收 YoY > 20%
-            c5 = major_holder_ratio >= 60.0     # 大戶持股 > 60%
-            c6 = operating_margin >= 20.0       # 營益率 > 20%
+            c1 = capital_billion < 60.0         # 資本額 < 60億
+            c2 = gross_margin >= 30.0           # 毛利率 > 30%
+            c3 = eps_4q >= 12.0                 # 近4季 EPS > 12元
+            c4 = rev_yoy_3m_avg >= 10.0         # 營收 YoY > 10%
+            c5 = major_holder_ratio >= 50.0     # 大戶持股 > 50%
+            c6 = operating_margin >= 15.0       # 營益率 > 15%
 
             match_count = sum([c1, c2, c3, c4, c5, c6])
 
@@ -192,13 +192,13 @@ def send_email_notification(df):
         <h2 style="color: #d9534f; border-bottom: 2px solid #d9534f; padding-bottom: 8px;">🔥【千金預備軍分級監控報告】🔥</h2>
         <p>機器人已完成全台股財報與籌碼掃描，本次共掃描出 <b>{total_found}</b> 檔符合 4 項（含）以上條件之標的：</p>
 
-        <p><b>📋 當前『千金 6 大 DNA』篩選門檻如下：</b><br>
-        1. 資本額小於 30 億（中小型股）<br>
-        2. 近 4 季 EPS ≥ 20 元（一年賺 2 個股本）<br>
-        3. 毛利率 ≥ 45%（極高獲利護城河）<br>
-        4. 營益率 ≥ 20%（本業獲利極強）<br>
-        5. 營收 YoY ≥ 20%（近 3 個月營收爆發）<br>
-        6. 千張大戶持股 ≥ 60%（籌碼高度集中）</p>
+        <p><b>📋 當前2026 10月版『千金 6 大 DNA』篩選門檻如下：</b><br>
+        1. 資本額小於 60 億（中小型股）<br>
+        2. 近 4 季 EPS ≥ 12 元（一年賺 1 個股本）<br>
+        3. 毛利率 ≥ 30%（極高獲利護城河）<br>
+        4. 營益率 ≥ 15%（本業獲利極強）<br>
+        5. 營收 YoY ≥ 10%（近 3 個月營收爆發）<br>
+        6. 千張大戶持股 ≥ 50%（籌碼高度集中）</p>
         
         <h3 style="color: #d9534f;">🌟 第一梯隊：完全符合 6 大 DNA（頂級預備軍）</h3>
         {generate_table_html(df_6, "#f8d7da")}
