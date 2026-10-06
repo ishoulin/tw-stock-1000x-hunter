@@ -15,25 +15,49 @@ def fetch_and_filter_1000x_candidates():
     
     print("🚀 開始執行台股『千金預備軍』分級篩選機制 (4/5/6 項條件判斷)...")
     fm = DataLoader()
-
+   
+    today = datetime.date.today()
+    start_date = (today - datetime.timedelta(days=365)).strftime("%Y-%m-%d") 
+    
     try:
         stock_info = fm.taiwan_stock_info()
         
-        # 1. 純 4 位數代碼
-        # 2. 僅限上市 (twse) 與 上櫃 (tpex)，排除興櫃與其他衍生商品
-        # 3. 排除金融、營造、觀光
+        # 1. 修正 FinMind 正確欄位名稱 (market) 與產業過濾
         valid_stocks = stock_info[
             (stock_info['stock_id'].str.isdigit()) & 
             (stock_info['stock_id'].str.len() == 4) &
-            (stock_info['type'].isin(['twse', 'tpex'])) &
-            # 1. 最外層用括號包起來（方便換行），且 .isin([ ... ]) 的括號要正確閉合
+            (stock_info['market'].isin(['Taiwan Stock Market', 'TWO'])) &  # 👈 修正為 FinMind 的真實 Market 名稱
             (~stock_info['industry_category'].isin([
-                '金融保險', 
-                '建材營造', 
-                '觀光餐旅'
-            ]))
+                '金融保險', '建材營造', '觀光餐旅', '金融保險業', '建材營造業', '觀光事業'
+            ])) &
+            (~stock_info['stock_name'].str.contains('ETF|TDR|特別股|創|正2|反1', na=False))
         ].copy()
-        
+
+        raw_list = valid_stocks['stock_id'].tolist()
+        print(f"🧹 基本產業過濾完成，剩餘普通股: {len(raw_list)} 檔")
+
+        # 2. ⚡ 關鍵關鍵！加入「股價/成交量」速篩（1次 API 搞定全市場，省下 80% 無用請求）
+        recent_date = (datetime.date.today() - datetime.timedelta(days=7)).strftime("%Y-%m-%d")
+        price_data = fm.taiwan_stock_daily_price(start_date=recent_date)
+
+        if price_data is not None and not price_data.empty:
+            latest_prices = price_data.groupby('stock_id').last()
+            
+            # 濾網：收盤價 >= 25 元 且 成交量 >= 50,000 股 (50張)
+            qualified = latest_prices[
+                (latest_prices['close'] >= 25) & 
+                (latest_prices['Trading_Volume'] >= 50000)
+            ]
+            valid_set = set(qualified.index)
+            valid_set.update(debug_stocks)  # 強制保留 Debug 測試股
+            
+            stock_list = [s for s in raw_list if s in valid_set]
+            print(f"🎯 股價流動性快篩完成！目標精簡為 {len(stock_list)} 檔（完美避開 API 牆）\n")
+        else:
+            stock_list = raw_list
+
+        total_count = len(stock_list)
+              
     except Exception as e:
         print(f"⚠️ 讀取股票基本資料失敗: {e}")
         return pd.DataFrame()
