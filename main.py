@@ -102,6 +102,22 @@ def fetch_and_filter_1000x_candidates():
 
             match_count = sum([c1, c2, c3, c4, c5, c6])
 
+            # ==================================================================
+            # 🔍 【DEBUG 診斷區塊 - 放在這裡！】
+            # 特別鎖定指標股，只要遇到這幾檔就強制印出中間過程數據
+            # ==================================================================
+            debug_stocks = ['2330', '3008', '5274', '6669']
+            if stock_id in debug_stocks:
+                print(f"\n================ [DEBUG 診斷: {stock_id}] ================")
+                print(f"1. 資本額 (億): {capital_billion:.2f} (c1 < 60: {c1})")
+                print(f"2. 毛利率 (%): {gross_margin:.2f}% (c2 >= 30%: {c2})")
+                print(f"3. 近 4 季 EPS: {eps_4q:.2f} (c3 >= 12: {c3})")
+                print(f"4. 營收 YoY (%): {rev_yoy_3m_avg:.2f}% (c4 >= 10%: {c4})")
+                print(f"5. 大戶持股 (%): {major_holder_ratio:.2f}% (c5 >= 50%: {c5})")
+                print(f"6. 營益率 (%): {operating_margin:.2f}% (c6 >= 15%: {c6})")
+                print(f"👉 符合項目數: {match_count} / 6")
+                print(f"========================================================\n")
+            
             # 符合 4 個或以上就放入結果
             if match_count >= 4:
                 stock_name_series = valid_stocks[valid_stocks['stock_id'] == stock_id]['stock_name']
