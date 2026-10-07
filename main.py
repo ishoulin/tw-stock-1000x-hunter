@@ -49,15 +49,20 @@ def fetch_and_filter_1000x_candidates():
         # 2. 免費版完美快篩：自動遞減找出最新交易日 (防爆機制)
         # ------------------------------------------------------------------
         price_data = None
-        # 往前遞減 15 天，確保遇到連續假期也能抓到最新的開盤交易日
-        for days_back in range(1, 16):
+        # 鎖定 7 天前，避開抓取最新資料被阻擋
+        for days_back in range(7, 15):
             target_date = (today - datetime.timedelta(days=days_back)).strftime("%Y-%m-%d")
             try:
                 temp_df = fm.taiwan_stock_price_all(date=target_date)
                 if temp_df is not None and not temp_df.empty and 'close' in temp_df.columns:
-                    price_data = temp_df
-                    print(f"✅ 成功取得 {target_date} 交易日全市場股價數據！")
-                    break
+                    # 👈 核心防護：強制將股價與成交量轉為數字型態，避免字串比對失靈
+                    temp_df['close'] = pd.to_numeric(temp_df['close'], errors='coerce')
+                    temp_df['Trading_Volume'] = pd.to_numeric(temp_df['Trading_Volume'], errors='coerce')
+                    
+                    if temp_df['close'].dropna().count() > 500:  # 確保至少有 500 檔以上的有效數
+                        price_data = temp_df
+                        print(f"✅ 成功取得 {target_date} 交易日全市場股價數據！")
+                        break
             except Exception:
                 continue
 
