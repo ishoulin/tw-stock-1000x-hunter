@@ -46,60 +46,55 @@ def fetch_and_filter_1000x_candidates():
         print(f"🧹 基本產業過濾完成，剩餘普通股: {len(raw_list)} 檔")
 
         # ------------------------------------------------------------------
-        # 2. 終極解法：使用證交所 / 櫃買 Open Data 免費全市場快篩 (100% 成功率)
+        # 2. 證交所 / 櫃買 Open Data 終極穩健快篩 (欄位精準對齊)
         # ------------------------------------------------------------------
         price_data = None
-                       
-        # 1. 先嘗試透過證交所 OpenAPI 獲取最新收盤價資訊 (免 API Key，極速)
+        
         try:
             import requests
-            # 證交所每日個股日本益比、收盤價資訊 API
+            twse_list = []
+            
+            # 1. 抓取證交所 (TWSE) 股價：BWIBBU_ALL (Code: 代號, ClosingPrice: 收盤價)
             twse_url = "https://openapi.twse.com.tw/v1/exchangeReport/BWIBBU_ALL"
             res = requests.get(twse_url, timeout=10)
-            twse_df = pd.DataFrame()
             if res.status_code == 200:
-                data = res.json()
-                if isinstance(data, list) and len(data) > 0:
-                    twse_df = pd.DataFrame(data)
-                    # 欄位對應: Code (股票代號), ClosingPrice (收盤價)
-                    twse_df = twse_df.rename(columns={'Code': 'stock_id', 'ClosingPrice': 'close'})
-                    twse_df['close'] = pd.to_numeric(twse_df['close'], errors='coerce')
-                    twse_df = twse_df[['stock_id', 'close']].dropna()
-                
-                # 櫃買中心 (OTC) 個股收盤價 API
-                tpex_url = "https://www.tpex.org.tw/openapi/v1/mopsprt_otc"
-                res_tpex = requests.get(tpex_url, timeout=10)
-                tpex_df = pd.DataFrame()
-                if res_tpex.status_code == 200:
-                    data_tpex = res_tpex.json()
-                    if isinstance(data_tpex, list) and len(data_tpex) > 0:
-                        tpex_df = pd.DataFrame(data_tpex)
-                        # 櫃買欄位對應: SecuritiesCompanyCode -> stock_id, Close -> close
-                        tpex_df = tpex_df.rename(columns={'SecuritiesCompanyCode': 'stock_id', 'Close': 'close'})
-                        tpex_df['close'] = pd.to_numeric(tpex_df['close'], errors='coerce')
-                        tpex_df = tpex_df[['stock_id', 'close']].dropna()
-                
-                # 3. 合併兩大市場數據
-                full_df = pd.concat([twse_df, tpex_df], ignore_index=True)
+                for row in res.json():
+                    sid = row.get('Code', '')
+                    price = row.get('ClosingPrice', '')
+                    if sid and price and price != '-':
+                        twse_list.append({'stock_id': str(sid), 'close': price})
+            
+            # 2. 抓取櫃買中心 (TPEx) 股價：mopsprt_otc (SecuritiesCompanyCode: 代號, Close: 收盤價)
+            tpex_url = "https://www.tpex.org.tw/openapi/v1/mopsprt_otc"
+            res_tpex = requests.get(tpex_url, timeout=10)
+            if res_tpex.status_code == 200:
+                for row in res_tpex.json():
+                    sid = row.get('SecuritiesCompanyCode', '')
+                    price = row.get('Close', '')
+                    if sid and price and price != '-':
+                        twse_list.append({'stock_id': str(sid), 'close': price})
 
-                if not full_df.empty and full_df['close'].count() > 500:
+            # 3. 轉為 DataFrame 並做數字轉型
+            if twse_list:
+                full_df = pd.DataFrame(twse_list)
+                full_df['close'] = pd.to_numeric(full_df['close'], errors='coerce')
+                full_df = full_df.dropna(subset=['close'])
+                
+                if len(full_df) > 500:
                     price_data = full_df
                     print("✅ 成功透過台灣證交所/櫃買 Open Data 取得全市場最新股價！")
         except Exception as e:
             print(f"⚠️ 官方 Open Data 快篩讀取跳過: {e}")
 
         if price_data is not None and not price_data.empty:
-            # 濾網：收盤價 >= 25 元
-            qualified = price_data[price_data['close'] >= 25.0]
+            # 濾網 1: 收盤價 >= 25 元
+            qualified = price_data[price_data['close'] >= 25.0].copy()
 
-            # 👈 核心防護：確保 close 欄位為浮點數，避免字串排序（例如 "90" > "100"）出錯
-            qualified['close'] = pd.to_numeric(qualified['close'], errors='coerce')
-
-            # 按股價高低排序，鎖定前 200 檔高爆發力標的，API 請求量直接砍半！
+            # 濾網 2: 依股價由高到低排序，精準鎖定前 200 檔高爆發力標的（壓低 FinMind API 請求量，防 Timeout）
             qualified = qualified.sort_values(by='close', ascending=False)
             valid_set = set(qualified['stock_id'].astype(str).head(200).unique())
             valid_set.update(debug_stocks)
-            
+
             stock_list = [s for s in raw_list if str(s) in valid_set]
             valid_stocks = valid_stocks[valid_stocks['stock_id'].isin(stock_list)]
             print(f"🎯 快篩成功！掃描目標成功精簡為 {len(stock_list)} 檔核心優質標的！\n")
@@ -108,7 +103,7 @@ def fetch_and_filter_1000x_candidates():
             stock_list = [s for s in raw_list if s in debug_stocks]
 
         total_count = len(stock_list)
-                
+                        
     except Exception as e:
         print(f"⚠️ 讀取股票基本資料失敗: {e}")
         return pd.DataFrame()
