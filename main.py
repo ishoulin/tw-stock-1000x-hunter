@@ -93,6 +93,10 @@ def fetch_and_filter_1000x_candidates():
 
         total_count = len(stock_list)
                 
+    except Exception as e:
+        print(f"⚠️ 讀取股票基本資料失敗: {e}")
+        return pd.DataFrame()
+    
     print(f"🔍 正式開始掃描精選台股 {total_count} 檔標的...")
 
     candidates = []
