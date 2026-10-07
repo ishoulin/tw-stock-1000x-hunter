@@ -8,7 +8,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 30 # 設定 30 分鐘超時上限，保護 GitHub Actions 配額
+    timeout-minutes: 60 # 設定 60 分鐘超時上限，保護 GitHub Actions 配額
 
     steps:
     - name: Checkout Code
