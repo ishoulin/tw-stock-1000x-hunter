@@ -8,25 +8,26 @@ from email.mime.multipart import MIMEMultipart
 from FinMind.data import DataLoader
 
 def fetch_and_filter_1000x_candidates():
-    # ... 前面抓取股票清單等邏輯 ...
-
     # 針對特定指標股開啟 DEBUG 診斷印出
-    debug_stocks = ['2330', '2454', '3661']  # 👈 在迴圈外補上這行
+    debug_stocks = ['2330', '2454', '3661']
     
     print("🚀 開始執行台股『千金預備軍』分級篩選機制 (4/5/6 項條件判斷)...")
     fm = DataLoader()
-   
+    
     today = datetime.date.today()
     start_date = (today - datetime.timedelta(days=365)).strftime("%Y-%m-%d") 
     
+    valid_stocks = pd.DataFrame()
+    stock_list = []
+
     try:
         stock_info = fm.taiwan_stock_info()
         
-        # 1. 修正 FinMind 正確欄位名稱 (market) 與產業過濾
+        # 1. 修正 FinMind 正確欄位名稱 (type) 與產業過濾
         valid_stocks = stock_info[
             (stock_info['stock_id'].str.isdigit()) & 
             (stock_info['stock_id'].str.len() == 4) &
-            (stock_info['type'].isin(['twse', 'tpex'])) &  # 👈 修正為 FinMind 的真實 Market 名稱
+            (stock_info['type'].isin(['twse', 'tpex'])) & 
             (~stock_info['industry_category'].isin([
                 '金融保險', '建材營造', '觀光餐旅', '金融保險業', '建材營造業', '觀光事業'
             ])) &
@@ -37,17 +38,14 @@ def fetch_and_filter_1000x_candidates():
         print(f"🧹 基本產業過濾完成，剩餘普通股: {len(raw_list)} 檔")
 
         # ------------------------------------------------------------------
-        # 2. 免費版完美快篩：自動遞減找出最新交易日
+        # 2. 免費版完美快篩：自動遞減找出最新交易日 (防爆機制)
         # ------------------------------------------------------------------
-        stock_list = raw_list
         price_data = None
-        
-        # 往前嘗試最多 7 天，找到有開盤交易的最新日期
         for days_back in range(1, 8):
             target_date = (today - datetime.timedelta(days=days_back)).strftime("%Y-%m-%d")
             try:
                 temp_df = fm.taiwan_stock_price_all(date=target_date)
-                if temp_df is not None and not temp_df.empty:
+                if temp_df is not None and not temp_df.empty and 'close' in temp_df.columns:
                     price_data = temp_df
                     print(f"✅ 成功取得 {target_date} 交易日全市場股價數據！")
                     break
@@ -61,57 +59,50 @@ def fetch_and_filter_1000x_candidates():
                 (price_data['Trading_Volume'] >= 50000)
             ]
             valid_set = set(qualified['stock_id'].unique())
-            valid_set.update(debug_stocks)  # 保留 Debug 測試股
+            valid_set.update(debug_stocks)  # 強制保留 Debug 測試股
 
             stock_list = [s for s in raw_list if s in valid_set]
             valid_stocks = valid_stocks[valid_stocks['stock_id'].isin(stock_list)]
-            print(f"🎯 快篩成功！目標精簡為 {len(stock_list)} 檔核心優質標的！\n")
+            print(f"🎯 快篩成功！掃描目標精簡為 {len(stock_list)} 檔核心優質標的！\n")
         else:
-            print("⚠️ 拿不到近期股價，降級為全量掃描...")
+            # 若連假期間抓不到數據，強制鎖定 Debug 股票，防止去跑 2,700 檔超時
+            print("⚠️ 未能取得近期股價，啟動防爆保護，僅掃描指標診斷股...")
+            stock_list = [s for s in raw_list if s in debug_stocks]
 
-        total_count = len(stock_list)
-                                      
     except Exception as e:
         print(f"⚠️ 讀取股票基本資料失敗: {e}")
         return pd.DataFrame()
 
-    candidates = []
-    today = datetime.date.today()
-    start_date = (today - datetime.timedelta(days=365)).strftime("%Y-%m-%d")
-
-    stock_list = valid_stocks['stock_id'].tolist()
     total_count = len(stock_list)
-    print(f"🔍 已精準過濾非上市櫃標的，正式開始掃描台股 {total_count} 檔普通股...")
+    print(f"🔍 正式開始掃描精選台股 {total_count} 檔標的...")
 
-        
+    candidates = []
+
     for idx, stock_id in enumerate(stock_list, 1):
-        # 判斷當前這檔是否為診斷股票
         is_debug = stock_id in debug_stocks
     
         if is_debug:
             print(f"\n⚡ [DEBUG] 開始處理指標股: {stock_id}")
+            
         try:
             # 1. 財報數據 (EPS、毛利率、營益率、資本額)
             financial_data = fm.taiwan_stock_financial_statement(stock_id=stock_id, start_date=start_date)
             if financial_data is None or financial_data.empty:
+                time.sleep(0.3)
                 continue
 
-            # 抓取 EPS (支援 EPS / EPS(元) 等相容名稱)
+            # 抓取 EPS (安全相容寫法)
             eps_df = financial_data[financial_data['type'].str.contains('EPS', case=False, na=False)]
             latest_4q_eps = eps_df.tail(4)
             if len(latest_4q_eps) < 4:
+                time.sleep(0.3)
                 continue
             eps_4q = latest_4q_eps['value'].sum()
-            latest_4q = financial_data[financial_data['type'] == 'EPS'].tail(4)
-            if len(latest_4q) < 4:
-                continue
-            eps_4q = latest_4q['value'].sum()
 
-            # 抓取最近一季的毛利率、營益率與資本額
+            # 抓取毛利率、營益率與資本額
             gross_df = financial_data[financial_data['type'] == 'GrossProfitMargin']
             gross_margin = gross_df.tail(1)['value'].values[0] if not gross_df.empty else 0
 
-            # 抓取營益率 (OperatingIncomeMargin / OperatingMargin)
             oper_df = financial_data[financial_data['type'] == 'OperatingIncomeMargin']
             operating_margin = oper_df.tail(1)['value'].values[0] if not oper_df.empty else 0
 
@@ -123,7 +114,6 @@ def fetch_and_filter_1000x_candidates():
             if revenue_data is None or revenue_data.empty:
                 rev_yoy_3m_avg = 0.0
             else:
-                # 相容欄位名稱處理
                 yoy_col = 'revenue_year_growth_ratio' if 'revenue_year_growth_ratio' in revenue_data.columns else 'year_growth_ratio'
                 rev_yoy_3m_avg = revenue_data.tail(3)[yoy_col].mean() if yoy_col in revenue_data.columns else 0.0
             
@@ -138,22 +128,18 @@ def fetch_and_filter_1000x_candidates():
                 thousand_share_holders = holder_data[holder_data['HoldingSharesLevel'] == '15']
                 major_holder_ratio = thousand_share_holders.tail(1)['percent'].values[0] if not thousand_share_holders.empty else 0
 
-            
             # ------------------------------------------------------------------
-            # 【判斷 6 大條件符合數 - 2026 10月版】
+            # 【判斷 6 大條件符合數】
             # ------------------------------------------------------------------
             c1 = capital_billion < 60.0         # 資本額 < 60億
-            c2 = gross_margin >= 30.0           # 毛利率 > 30%
-            c3 = eps_4q >= 12.0                 # 近4季 EPS > 12元
-            c4 = rev_yoy_3m_avg >= 10.0         # 營收 YoY > 10%
-            c5 = major_holder_ratio >= 50.0     # 大戶持股 > 50%
-            c6 = operating_margin >= 15.0       # 營益率 > 15%
+            c2 = gross_margin >= 30.0           # 毛利率 >= 30%
+            c3 = eps_4q >= 12.0                 # 近4季 EPS >= 12元
+            c4 = rev_yoy_3m_avg >= 10.0         # 營收 YoY >= 10%
+            c5 = major_holder_ratio >= 50.0     # 大戶持股 >= 50%
+            c6 = operating_margin >= 15.0       # 營益率 >= 15%
 
             match_count = sum([c1, c2, c3, c4, c5, c6])
- 
-            # ------------------------------------------------------------------
-            # 3. 計算完畢後，如果是指標股就強制印出數值
-            # ------------------------------------------------------------------
+
             if is_debug:
                 print(f"================ [DEBUG 診斷: {stock_id}] ================")
                 print(f"1. 資本額 (億): {capital_billion:.2f} (c1 < 60: {c1})")
@@ -184,21 +170,22 @@ def fetch_and_filter_1000x_candidates():
                 candidates.append(item)
                 print(f"🎯 [{idx}/{total_count}] 找到潛力股！[{match_count}/6 項符合] {stock_id} {stock_name} (EPS: {round(eps_4q,1)}, 大戶: {round(major_holder_ratio,1)}%)")
 
-            # 每處理 100 檔輸出一次進度
-            if idx % 100 == 0:
-                total_count_str = len(stock_list) if 'total_count' not in locals() else total_count
+            if idx % 50 == 0:
                 print(f"⏳ 已完成 {idx}/{total_count} 檔掃描...")
+
+            # 正常跑完每檔股票冷卻 0.3 秒，維護 API 健康度
+            time.sleep(0.3)
 
         except Exception as e:
             err_msg = str(e).lower()
             if "ip banned" in err_msg or "429" in err_msg:
                 print(f"⚠️ 觸發 FinMind IP 頻率限制，觸發檔位 {stock_id}，自動冷卻 30 秒後繼續...")
-                time.sleep(30)  # 👈 如果不幸已經被擋，自動冷卻 30 秒救回
+                time.sleep(30)
             else:
                 if is_debug:
                     print(f"❌ [DEBUG 報錯] {stock_id} 運算時發生例外錯誤: {e}")
-            time.sleep(0.3)
-        continue
+                time.sleep(0.3)
+            continue
 
     df_result = pd.DataFrame(candidates)
     if not df_result.empty:
@@ -262,9 +249,9 @@ def send_email_notification(df):
     <html>
     <body style="font-family: Arial, sans-serif; color: #333; line-height: 1.6;">
         <h2 style="color: #d9534f; border-bottom: 2px solid #d9534f; padding-bottom: 8px;">🔥【千金預備軍分級監控報告】🔥</h2>
-        <p>機器人已完成全台股財報與籌碼掃描，本次共掃描出 <b>{total_found}</b> 檔符合 4 項（含）以上條件之標的：</p>
+        <p>機器人已完成台股精選標的之財報與籌碼掃描，本次共掃描出 <b>{total_found}</b> 檔符合 4 項（含）以上條件之標的：</p>
 
-        <p><b>📋 當前2026 10月版『千金 6 大 DNA』篩選門檻如下：</b><br>
+        <p><b>📋 當前『千金 6 大 DNA』篩選門檻如下：</b><br>
         1. 資本額小於 60 億（中小型股）<br>
         2. 近 4 季 EPS ≥ 12 元（一年賺 1 個股本）<br>
         3. 毛利率 ≥ 30%（極高獲利護城河）<br>
@@ -284,7 +271,7 @@ def send_email_notification(df):
         <br>
         <p style="font-size: 12px; color: #777; border-top: 1px solid #ddd; padding-top: 10px;">
             💡 本郵件由 Project 1000x Hunter 自動化機器人發送。<br>
-            評估條件包含：資本額<30億、毛利率>45%、EPS>20元、營收YoY>20%、大戶持股>60%、營益率>20%。
+            評估條件：資本額<60億、毛利率≥30%、EPS≥12元、營收YoY≥10%、大戶持股≥50%、營益率≥15%。
         </p>
     </body>
     </html>
