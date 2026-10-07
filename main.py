@@ -56,24 +56,34 @@ def fetch_and_filter_1000x_candidates():
             # 證交所每日個股日本益比、收盤價資訊 API
             twse_url = "https://openapi.twse.com.tw/v1/exchangeReport/BWIBBU_ALL"
             res = requests.get(twse_url, timeout=10)
+            twse_df = pd.DataFrame()
             if res.status_code == 200:
                 data = res.json()
-                twse_df = pd.DataFrame(data)
-                # 欄位對應: Code (股票代號), ClosingPrice (收盤價)
-                twse_df = twse_df.rename(columns={'Code': 'stock_id', 'ClosingPrice': 'close'})
-                twse_df['close'] = pd.to_numeric(twse_df['close'], errors='coerce')
+                if isinstance(data, list) and len(data) > 0:
+                    twse_df = pd.DataFrame(data)
+                    # 欄位對應: Code (股票代號), ClosingPrice (收盤價)
+                    twse_df = twse_df.rename(columns={'Code': 'stock_id', 'ClosingPrice': 'close'})
+                    twse_df['close'] = pd.to_numeric(twse_df['close'], errors='coerce')
+                    twse_df = twse_df[['stock_id', 'close']].dropna()
                 
                 # 櫃買中心 (OTC) 個股收盤價 API
                 tpex_url = "https://www.tpex.org.tw/openapi/v1/mopsprt_otc"
                 res_tpex = requests.get(tpex_url, timeout=10)
+                tpex_df = pd.DataFrame()
                 if res_tpex.status_code == 200:
-                    tpex_df = pd.DataFrame(res_tpex.json())
-                    tpex_df = tpex_df.rename(columns={'SecuritiesCompanyCode': 'stock_id', 'Close': 'close'})
-                    tpex_df['close'] = pd.to_numeric(tpex_df['close'], errors='coerce')
-                    twse_df = pd.concat([twse_df[['stock_id', 'close']], tpex_df[['stock_id', 'close']]], ignore_index=True)
+                    data_tpex = res_tpex.json()
+                    if isinstance(data_tpex, list) and len(data_tpex) > 0:
+                        tpex_df = pd.DataFrame(data_tpex)
+                        # 櫃買欄位對應: SecuritiesCompanyCode -> stock_id, Close -> close
+                        tpex_df = tpex_df.rename(columns={'SecuritiesCompanyCode': 'stock_id', 'Close': 'close'})
+                        tpex_df['close'] = pd.to_numeric(tpex_df['close'], errors='coerce')
+                        tpex_df = tpex_df[['stock_id', 'close']].dropna()
+                
+                # 3. 合併兩大市場數據
+                full_df = pd.concat([twse_df, tpex_df], ignore_index=True)
 
-                if not twse_df.empty and twse_df['close'].dropna().count() > 500:
-                    price_data = twse_df
+                if not full_df.empty and full_df['close'].count() > 500:
+                    price_data = full_df
                     print("✅ 成功透過台灣證交所/櫃買 Open Data 取得全市場最新股價！")
         except Exception as e:
             print(f"⚠️ 官方 Open Data 快篩讀取跳過: {e}")
