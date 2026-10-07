@@ -81,9 +81,15 @@ def fetch_and_filter_1000x_candidates():
         if price_data is not None and not price_data.empty:
             # 濾網：收盤價 >= 25 元
             qualified = price_data[price_data['close'] >= 25.0]
-            valid_set = set(qualified['stock_id'].astype(str).unique())
-            valid_set.update(debug_stocks)
 
+            # 👈 核心防護：確保 close 欄位為浮點數，避免字串排序（例如 "90" > "100"）出錯
+            qualified['close'] = pd.to_numeric(qualified['close'], errors='coerce')
+
+            # 按股價高低排序，鎖定前 200 檔高爆發力標的，API 請求量直接砍半！
+            qualified = qualified.sort_values(by='close', ascending=False)
+            valid_set = set(qualified['stock_id'].astype(str).head(200).unique())
+            valid_set.update(debug_stocks)
+            
             stock_list = [s for s in raw_list if str(s) in valid_set]
             valid_stocks = valid_stocks[valid_stocks['stock_id'].isin(stock_list)]
             print(f"🎯 快篩成功！掃描目標成功精簡為 {len(stock_list)} 檔核心優質標的！\n")
