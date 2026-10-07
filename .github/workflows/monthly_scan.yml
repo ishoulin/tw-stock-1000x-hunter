@@ -29,5 +29,6 @@ jobs:
         SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
         SENDER_PASSWORD: ${{ secrets.SENDER_PASSWORD }}
         RECEIVER_EMAIL: ${{ secrets.RECEIVER_EMAIL }}
+        FINMIND_API_TOKEN: ${{ secrets.FINMIND_API_TOKEN }}  # 👈 記得加上這一行！
       run: |
         python main.py
