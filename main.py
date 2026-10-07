@@ -12,7 +12,15 @@ def fetch_and_filter_1000x_candidates():
     debug_stocks = ['2330', '2454', '3661']
     
     print("🚀 開始執行台股『千金預備軍』分級篩選機制 (4/5/6 項條件判斷)...")
+    
+    # 👈 讀取 GitHub Secret 的 FinMind Token
+    api_token = os.environ.get("FINMIND_API_TOKEN", "")
     fm = DataLoader()
+    if api_token:
+        fm.login_by_token(api_token=api_token)
+        print("🔑 成功載入 FinMind API Token 認證！")
+    else:
+        print("⚠️ 未偵測到 API Token，使用匿名免費額度...")
     
     today = datetime.date.today()
     start_date = (today - datetime.timedelta(days=365)).strftime("%Y-%m-%d") 
