@@ -46,48 +46,53 @@ def fetch_and_filter_1000x_candidates():
         print(f"🧹 基本產業過濾完成，剩餘普通股: {len(raw_list)} 檔")
 
         # ------------------------------------------------------------------
-        # 2. 免費版完美快篩：自動遞減找出最新交易日 (防爆機制)
+        # 2. 終極解法：使用證交所 / 櫃買 Open Data 免費全市場快篩 (100% 成功率)
         # ------------------------------------------------------------------
         price_data = None
-        # 鎖定 7 天前，避開抓取最新資料被阻擋
-        for days_back in range(7, 15):
-            target_date = (today - datetime.timedelta(days=days_back)).strftime("%Y-%m-%d")
-            try:
-                temp_df = fm.taiwan_stock_price_all(date=target_date)
-                if temp_df is not None and not temp_df.empty and 'close' in temp_df.columns:
-                    # 👈 核心防護：強制將股價與成交量轉為數字型態，避免字串比對失靈
-                    temp_df['close'] = pd.to_numeric(temp_df['close'], errors='coerce')
-                    temp_df['Trading_Volume'] = pd.to_numeric(temp_df['Trading_Volume'], errors='coerce')
-                    
-                    if temp_df['close'].dropna().count() > 500:  # 確保至少有 500 檔以上的有效數
-                        price_data = temp_df
-                        print(f"✅ 成功取得 {target_date} 交易日全市場股價數據！")
-                        break
-            except Exception:
-                continue
+                       
+        # 1. 先嘗試透過證交所 OpenAPI 獲取最新收盤價資訊 (免 API Key，極速)
+        try:
+            import requests
+            # 證交所每日個股日本益比、收盤價資訊 API
+            twse_url = "https://openapi.twse.com.tw/v1/exchangeReport/BWIBBU_ALL"
+            res = requests.get(twse_url, timeout=10)
+            if res.status_code == 200:
+                data = res.json()
+                twse_df = pd.DataFrame(data)
+                # 欄位對應: Code (股票代號), ClosingPrice (收盤價)
+                twse_df = twse_df.rename(columns={'Code': 'stock_id', 'ClosingPrice': 'close'})
+                twse_df['close'] = pd.to_numeric(twse_df['close'], errors='coerce')
+                
+                # 櫃買中心 (OTC) 個股收盤價 API
+                tpex_url = "https://www.tpex.org.tw/openapi/v1/mopsprt_otc"
+                res_tpex = requests.get(tpex_url, timeout=10)
+                if res_tpex.status_code == 200:
+                    tpex_df = pd.DataFrame(res_tpex.json())
+                    tpex_df = tpex_df.rename(columns={'SecuritiesCompanyCode': 'stock_id', 'Close': 'close'})
+                    tpex_df['close'] = pd.to_numeric(tpex_df['close'], errors='coerce')
+                    twse_df = pd.concat([twse_df[['stock_id', 'close']], tpex_df[['stock_id', 'close']]], ignore_index=True)
+
+                if not twse_df.empty and twse_df['close'].dropna().count() > 500:
+                    price_data = twse_df
+                    print("✅ 成功透過台灣證交所/櫃買 Open Data 取得全市場最新股價！")
+        except Exception as e:
+            print(f"⚠️ 官方 Open Data 快篩讀取跳過: {e}")
 
         if price_data is not None and not price_data.empty:
-            # 濾網：收盤價 >= 25 元 且 成交量 >= 50,000 股 (50張)
-            qualified = price_data[
-                (price_data['close'] >= 25) & 
-                (price_data['Trading_Volume'] >= 50000)
-            ]
-            valid_set = set(qualified['stock_id'].unique())
-            valid_set.update(debug_stocks)  # 強制保留 Debug 測試股
+            # 濾網：收盤價 >= 25 元
+            qualified = price_data[price_data['close'] >= 25.0]
+            valid_set = set(qualified['stock_id'].astype(str).unique())
+            valid_set.update(debug_stocks)
 
-            stock_list = [s for s in raw_list if s in valid_set]
+            stock_list = [s for s in raw_list if str(s) in valid_set]
             valid_stocks = valid_stocks[valid_stocks['stock_id'].isin(stock_list)]
-            print(f"🎯 快篩成功！掃描目標精簡為 {len(stock_list)} 檔核心優質標的！\n")
+            print(f"🎯 快篩成功！掃描目標成功精簡為 {len(stock_list)} 檔核心優質標的！\n")
         else:
-            # 若連假期間抓不到數據，強制鎖定 Debug 股票，防止去跑 2,700 檔超時
-            print("⚠️ 未能取得近期股價，啟動防爆保護，僅掃描指標診斷股...")
+            print("⚠️ 快篩連線異常，啟動防爆保護，僅掃描指標診斷股...")
             stock_list = [s for s in raw_list if s in debug_stocks]
 
-    except Exception as e:
-        print(f"⚠️ 讀取股票基本資料失敗: {e}")
-        return pd.DataFrame()
-
-    total_count = len(stock_list)
+        total_count = len(stock_list)
+                
     print(f"🔍 正式開始掃描精選台股 {total_count} 檔標的...")
 
     candidates = []
