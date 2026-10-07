@@ -41,7 +41,8 @@ def fetch_and_filter_1000x_candidates():
         # 2. 免費版完美快篩：自動遞減找出最新交易日 (防爆機制)
         # ------------------------------------------------------------------
         price_data = None
-        for days_back in range(1, 8):
+        # 往前遞減 15 天，確保遇到連續假期也能抓到最新的開盤交易日
+        for days_back in range(1, 16):
             target_date = (today - datetime.timedelta(days=days_back)).strftime("%Y-%m-%d")
             try:
                 temp_df = fm.taiwan_stock_price_all(date=target_date)
