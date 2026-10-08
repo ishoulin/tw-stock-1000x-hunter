@@ -113,16 +113,26 @@ def fetch_and_filter_1000x_candidates():
                 yoy_col = 'revenue_year_growth_ratio' if 'revenue_year_growth_ratio' in revenue_data.columns else 'year_growth_ratio'
                 rev_yoy_3m_avg = revenue_data.tail(3)[yoy_col].mean() if yoy_col in revenue_data.columns else 0.0
             
-            # 3. 千張大戶持股比
+            # 3. 千張大戶持股比 (修正型態比對 Bug)
             holder_data = fm.taiwan_stock_holding_shares_per(
                 stock_id=stock_id, 
                 start_date=(today - datetime.timedelta(days=30)).strftime("%Y-%m-%d")
             )
             if holder_data is None or holder_data.empty:
-                major_holder_ratio = 0
+                major_holder_ratio = 0.0
             else:
+                # 👈 防護 1: 強制將 HoldingSharesLevel 轉為字串並去除空白，避免整數/字串比對失敗
+                holder_data['HoldingSharesLevel'] = holder_data['HoldingSharesLevel'].astype(str).str.strip()
+                
+                # Level 15 代表 1000張以上大戶
                 thousand_share_holders = holder_data[holder_data['HoldingSharesLevel'] == '15']
-                major_holder_ratio = thousand_share_holders.tail(1)['percent'].values[0] if not thousand_share_holders.empty else 0
+                
+                if not thousand_share_holders.empty:
+                    # 👈 防護 2: 強制轉為 float，取最新一期的 percent
+                    latest_val = thousand_share_holders.tail(1)['percent'].values[0]
+                    major_holder_ratio = float(latest_val) if pd.notna(latest_val) else 0.0
+                else:
+                    major_holder_ratio = 0.0
 
             # ------------------------------------------------------------------
             # 【判斷 6 大條件符合數】
@@ -146,7 +156,7 @@ def fetch_and_filter_1000x_candidates():
                 print(f"6. 營益率 (%): {operating_margin:.2f}% (c6 >= 15%: {c6})")
                 print(f"👉 符合項目數: {match_count} / 6")
                 print(f"========================================================\n")
-   
+               
             # 符合 4 個或以上就放入結果
             if match_count >= 4:
                 stock_name_series = valid_stocks[valid_stocks['stock_id'] == stock_id]['stock_name']
