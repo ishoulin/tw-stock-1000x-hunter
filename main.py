@@ -159,12 +159,15 @@ def fetch_and_filter_1000x_candidates():
                
             # 符合 4 個或以上就放入結果
             if match_count >= 4:
-                stock_name_series = valid_stocks[valid_stocks['stock_id'] == stock_id]['stock_name']
-                stock_name = stock_name_series.values[0] if not stock_name_series.empty else stock_id
+                # 防護 1: 確保 stock_id 轉為字串進行比對，避免 int/str 型態不符
+                stock_id_str = str(stock_id)
+                stock_name_series = valid_stocks[valid_stocks['stock_id'].astype(str) == stock_id_str]['stock_name']
+                stock_name = stock_name_series.values[0] if not stock_name_series.empty else stock_id_str
                 
                 item = {
-                    "stock_id": stock_id,
+                    "stock_id": stock_id_str,
                     "name": stock_name,
+                    "stock_name": stock_name,  # 雙 Key 防護，避免 Email 樣板抓不到欄位
                     "match_count": match_count,
                     "eps_4q": round(eps_4q, 2),
                     "margin": round(gross_margin, 2),
@@ -174,14 +177,14 @@ def fetch_and_filter_1000x_candidates():
                     "major_holders": round(major_holder_ratio, 2)
                 }
                 candidates.append(item)
-                print(f"🎯 [{idx}/{total_count}] 找到潛力股！[{match_count}/6 項符合] {stock_id} {stock_name} (EPS: {round(eps_4q,1)}, 大戶: {round(major_holder_ratio,1)}%)")
+                print(f"🎯 [{idx}/{total_count}] 找到潛力股！[{match_count}/6 項符合] {stock_id_str} {stock_name} (EPS: {round(eps_4q, 1)}, 大戶: {round(major_holder_ratio, 1)}%)")
 
             if idx % 50 == 0:
                 print(f"⏳ 已完成 {idx}/{total_count} 檔掃描...")
 
             # 正常跑完每檔股票冷卻 0.3 秒，維護 API 健康度
             time.sleep(0.3)
-
+                        
         except Exception as e:
             err_msg = str(e).lower()
             if "ip banned" in err_msg or "429" in err_msg:
