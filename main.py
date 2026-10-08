@@ -146,8 +146,9 @@ def fetch_and_filter_1000x_candidates():
 
             match_count = sum([c1, c2, c3, c4, c5, c6])
 
-            if is_debug:
-                print(f"================ [DEBUG 診斷: {stock_id}] ================")
+            # 🛠️ 【強制作業】：針對指標股無條件強制印出數據診斷，不依賴 is_debug 開關
+            if str(stock_id) in ['2330', '2454', '3661']:
+                print(f"================ [DEBUG 強制診斷: {stock_id}] ================")
                 print(f"1. 資本額 (億): {capital_billion:.2f} (c1 < 60: {c1})")
                 print(f"2. 毛利率 (%): {gross_margin:.2f}% (c2 >= 30%: {c2})")
                 print(f"3. 近 4 季 EPS: {eps_4q:.2f} (c3 >= 12: {c3})")
@@ -156,7 +157,7 @@ def fetch_and_filter_1000x_candidates():
                 print(f"6. 營益率 (%): {operating_margin:.2f}% (c6 >= 15%: {c6})")
                 print(f"👉 符合項目數: {match_count} / 6")
                 print(f"========================================================\n")
-               
+                                              
             # 符合 4 個或以上就放入結果
             if match_count >= 4:
                 # 防護 1: 確保 stock_id 轉為字串進行比對，避免 int/str 型態不符
@@ -184,15 +185,24 @@ def fetch_and_filter_1000x_candidates():
 
             # 正常跑完每檔股票冷卻 0.3 秒，維護 API 健康度
             time.sleep(0.3)
-                        
+        
+        
+
         except Exception as e:
             err_msg = str(e).lower()
+            stock_id_str = str(stock_id)
+
+            # 1. 優先處理 FinMind API 429 / IP 頻率限制
             if "ip banned" in err_msg or "429" in err_msg:
-                print(f"⚠️ 觸發 FinMind IP 頻率限制，觸發檔位 {stock_id}，自動冷卻 30 秒後繼續...")
+                print(f"⚠️ 觸發 FinMind IP 頻率限制，觸發檔位 {stock_id_str}，自動冷卻 30 秒後繼續...")
                 time.sleep(30)
             else:
-                if is_debug:
-                    print(f"❌ [DEBUG 報錯] {stock_id} 運算時發生例外錯誤: {e}")
+                # 2. 針對診斷指標股 (2330, 2454, 3661) 強制印出抓包訊息
+                if stock_id_str in ['2330', '2454', '3661']:
+                    print(f"❌ [DEBUG 抓包] 指標股 {stock_id_str} 在計算數據時爆出例外: {e}\n")
+                elif is_debug:
+                    print(f"❌ [DEBUG 報錯] {stock_id_str} 運算時發生例外錯誤: {e}")
+        
                 time.sleep(0.3)
             continue
 
