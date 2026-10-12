@@ -76,6 +76,7 @@ def fetch_and_filter_1000x_candidates():
 
     for idx, stock_id in enumerate(stock_list, 1):
         is_debug = stock_id in debug_stocks
+        stock_id_str = str(stock_id)
     
         if is_debug:
             print(f"\n⚡ [DEBUG] 開始處理指標股: {stock_id}")
@@ -160,8 +161,6 @@ def fetch_and_filter_1000x_candidates():
                                               
             # 符合 4 個或以上就放入結果
             if match_count >= 4:
-                # 防護 1: 確保 stock_id 轉為字串進行比對，避免 int/str 型態不符
-                stock_id_str = str(stock_id)
                 stock_name_series = valid_stocks[valid_stocks['stock_id'].astype(str) == stock_id_str]['stock_name']
                 stock_name = stock_name_series.values[0] if not stock_name_series.empty else stock_id_str
                 
