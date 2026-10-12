@@ -85,6 +85,7 @@ def fetch_and_filter_1000x_candidates():
             # 1. 財報數據 (EPS、毛利率、營益率、資本額)
             financial_data = fm.taiwan_stock_financial_statement(stock_id=stock_id, start_date=start_date)
             if financial_data is None or financial_data.empty:
+                if is_debug: print(f"⚠️ [DEBUG 追蹤] {stock_id_str} 財報資料為空")
                 time.sleep(0.3)
                 continue
 
@@ -92,6 +93,8 @@ def fetch_and_filter_1000x_candidates():
             eps_df = financial_data[financial_data['type'].str.contains('EPS', case=False, na=False)]
             latest_4q_eps = eps_df.tail(4)
             if len(latest_4q_eps) < 4:
+                if is_debug: 
+                    print(f"⚠️ [DEBUG 追蹤] {stock_id_str} EPS 季數不足 4 季 (實際抓到筆數: {len(latest_4q_eps)})")
                 time.sleep(0.3)
                 continue
             eps_4q = latest_4q_eps['value'].sum()
@@ -135,6 +138,9 @@ def fetch_and_filter_1000x_candidates():
                 else:
                     major_holder_ratio = 0.0
 
+            # 處理 EPS 加總（如果不足 4 季先給 0，避免崩潰）
+            eps_4q = latest_4q_eps['value'].sum() if len(latest_4q_eps) >= 4 else 0.0
+            
             # ------------------------------------------------------------------
             # 【判斷 6 大條件符合數】
             # ------------------------------------------------------------------
@@ -148,7 +154,7 @@ def fetch_and_filter_1000x_candidates():
             match_count = sum([c1, c2, c3, c4, c5, c6])
 
             # 🛠️ 【強制作業】：針對指標股無條件強制印出數據診斷，不依賴 is_debug 開關
-            if str(stock_id) in ['2330', '2454', '3661']:
+            if stock_id_str in ['2330', '2454', '3661']:
                 print(f"================ [DEBUG 強制診斷: {stock_id}] ================")
                 print(f"1. 資本額 (億): {capital_billion:.2f} (c1 < 60: {c1})")
                 print(f"2. 毛利率 (%): {gross_margin:.2f}% (c2 >= 30%: {c2})")
