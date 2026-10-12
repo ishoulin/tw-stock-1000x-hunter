@@ -164,7 +164,14 @@ def fetch_and_filter_1000x_candidates():
                 print(f"6. 營益率 (%): {operating_margin:.2f}% (c6 >= 15%: {c6})")
                 print(f"👉 符合項目數: {match_count} / 6")
                 print(f"========================================================\n")
-                                              
+            
+            # 如果 EPS 季數不足 4 季，在此處才跳過，不影響上面的診斷印出
+            if len(latest_4q_eps) < 4:
+                if is_debug: 
+                    print(f"⚠️ [DEBUG 追蹤] {stock_id_str} 因 EPS 季數不足 4 季而被跳過。")
+                time.sleep(0.3)
+                continue                                  
+            
             # 符合 4 個或以上就放入結果
             if match_count >= 4:
                 stock_name_series = valid_stocks[valid_stocks['stock_id'].astype(str) == stock_id_str]['stock_name']
